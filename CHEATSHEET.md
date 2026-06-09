@@ -6,6 +6,41 @@ An interviewer who sees a 200 response in minute 3 is a relaxed interviewer.
 
 ---
 
+## Step 0 — Environment check (before writing any code)
+
+Do this the moment you sit down. Nothing works if Postgres isn't running.
+
+```bash
+# 1. Start Postgres
+docker-compose up -d
+
+# 2. Install dependencies
+npm install
+
+# 3. Copy env if not already done
+cp .env.example .env
+
+# 4. Run migrations + seed
+npm run migrate
+npm run seed
+```
+
+If you skip this and go straight to code, you'll hit this error when you first curl:
+
+```
+AggregateError: connect ECONNREFUSED 127.0.0.1:5432
+```
+
+That means Postgres isn't running. `docker-compose up -d` fixes it every time.
+
+**Checklist before touching routes:**
+- [ ] `docker-compose up -d` ran without errors
+- [ ] `npm run migrate` passed (✅ Migration complete)
+- [ ] `npm run seed` passed (✅ Seed complete)
+- [ ] `.env` exists with `DATABASE_URL`
+
+---
+
 ## Tier 0 — Server alive (60 seconds)
 
 Do this first. Always. Before you touch the database.
@@ -324,3 +359,29 @@ router.get('/', async (req, res) => {
 - ✅ Parameterized queries (`$1`, `$2`) — never string concatenation
 - ✅ try/catch on every async handler
 - ✅ 404 before returning data, not after
+- ✅ Named route params: use `req` not `_req` when you need `req.params.id`
+- ✅ Single row: return `result.rows[0]`, not `result.rows`
+- ✅ Parameterized query: always pass the values array — `pool.query(SQL, [val])` not just `pool.query(SQL)`
+
+---
+
+## When something returns `{ error: "internal error" }`
+
+Your catch block is hiding the real error. Add this temporarily:
+
+```ts
+} catch (err) {
+  console.error(err)   // ← add this line
+  res.status(500).json({ error: 'Internal server error' });
+}
+```
+
+The terminal will print the actual error. Common ones:
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `ECONNREFUSED 127.0.0.1:5432` | Postgres not running | `docker-compose up -d` |
+| `relation "orders" does not exist` | Migration not run | `npm run migrate` |
+| `null value in column violates not-null` | Missing required field in INSERT | check your body validation |
+| `syntax error at or near "$1"` | Forgot to pass values array | `pool.query(SQL, [val])` |
+| `bind message has N parameter formats but M parameters` | Values array length doesn’t match `$N` count | count your `$1 $2...` vs array items |
